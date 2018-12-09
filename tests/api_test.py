@@ -24,7 +24,7 @@ from jax import test_util as jtu
 
 import jax.numpy as np
 from jax.config import config
-from jax import jit, grad, device_get, device_put
+from jax import jit, grad, device_get, device_put, hessian, gnvp, jacfwd, jacrev
 from jax.core import Primitive
 from jax.interpreters.partial_eval import def_abstract_eval
 from jax.interpreters.ad import defjvp
@@ -234,6 +234,28 @@ class APITest(jtu.JaxTestCase):
     assert onp.all(y2[1][0] == 2 * x)
     assert isinstance(y2[1][1], onp.ndarray)
     assert onp.all(y2[1][1] == 3 * x)
+
+  def test_hessian(self):
+    R = onp.random.RandomState(0).randn
+    A = R(4, 4)
+    x = R(4)
+
+    f = lambda x: np.dot(x, np.dot(A, x))
+    H = hessian(f)(x)
+    assert onp.allclose(H, A + A.T)
+
+  def test_gnvp(self):
+    R = onp.random.RandomState(0).randn
+    A = R(4, 4)
+    x = R(4)
+    v = R(4)
+
+    f = lambda x: np.tanh(np.dot(A, x))
+    J = jacfwd(f)(x)
+    y, gnvp_ = gnvp(f, x)
+    print(onp.dot(J.T.dot(J), v), gnvp_(v)[0])
+    assert onp.allclose(f(x), y)
+    assert onp.allclose(onp.dot(J.T.dot(J), v), gnvp_(v)[0])
 
 
 if __name__ == '__main__':

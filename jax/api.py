@@ -78,6 +78,22 @@ def jacrev(fun, x):
 def hessian(fun):
   return jacfwd(jacrev(fun))
 
+@curry
+def hvp(fun, x, v):
+  return jvp(grad(fun), (x,), (v,))
+
+def gnvp(fun, *primals):
+  fun = lu.wrap_init(fun)
+  primals_flat, in_trees = unzip2(map(tree_to_jaxtuples, primals))
+  check_args(primals_flat)
+  flat_fun, out_tree = flatten_fun(fun, in_trees)
+  out_primal, gnvp_packed = ad.gnvp(flat_fun, primals_flat)
+  out_tree = out_tree()
+  out_primal_py = build_tree(out_tree, out_primal)
+  ct_out_tree = PyTreeDef(node_types[tuple], None, in_trees)
+  gnvp_py = partial(unflatten_fun, gnvp_packed, (in_trees, ct_out_tree))
+  return out_primal_py, gnvp_py
+
 def vmap(fun, *args, **kwargs):
   in_axes = kwargs.pop("in_axes", 0)
   out_axes = kwargs.pop("out_axes", 0)
@@ -159,7 +175,7 @@ def lift_jaxpr(jaxpr, consts, io_tree, pvals, py_args):
 
 
 device_put = jit(lambda x: x)
-device_get_array = lambda x: x.copy() if type(x) is xla.DeviceArray else x
+device_get_array = lambda x: x.copy() if isinstance(x, xla.DeviceArray) else x
 device_get = partial(tree_map, device_get_array)
 
 

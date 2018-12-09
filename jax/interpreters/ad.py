@@ -18,7 +18,7 @@ from __future__ import print_function
 
 from . import partial_eval as pe
 from . import xla
-from .. import core as core
+from .. import core
 from ..core import JaxTuple, Trace, Tracer, new_master, get_aval, pack, call_p, Primitive
 from ..ad_util import (add_jaxvals, add_jaxvals_p, zeros_like_jaxval,
                        zeros_like_p, zero, Zero)
@@ -98,6 +98,15 @@ def unpair_pval(pval):
   else:
     aval_1, aval_2 = aval
     return (aval_1, const_1), (aval_2, const_2)
+
+def gnvp(traceable, primals):
+  out_primal, _, jaxpr, consts = linearize(traceable, *primals)
+  def gnvp_(*tangents):
+    ct = core.eval_jaxpr(jaxpr, consts, (), pack(primals), pack(tangents))
+    _, arg_cts = backward_pass(jaxpr, consts, (), ct)
+    return instantiate_zeros(pack(primals), arg_cts[1])
+
+  return out_primal, gnvp_
 
 def backward_pass(jaxpr, consts, freevar_vals, cotangent_in):
   def write_cotangent(v, ct):
